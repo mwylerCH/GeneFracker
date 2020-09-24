@@ -324,6 +324,7 @@ if (defined $PRECISON){
 if (defined $CUSTOM){
 	if (length($CUSTOM) != 0 ){
 		$TARGETdomain = $CUSTOM;
+            $TARGETdomain =~ s/ //g ;
 	        $TARGETdomain =~ s/^/^(?=.*/ ;
 	        $TARGETdomain =~ s/,/)(?=.*/g ;
 	        $TARGETdomain =~ s/$/)/ ;
@@ -411,7 +412,7 @@ foreach my $FRAME (1, 2, 3){
     foreach (@NewDetected) {
         # make name based on coordinates
         my @RowNewBed = (split ' ', $_);
-        my $GeneName = "$RowNewBed[0]_$RowNewBed[1]_$RowNewBed[2]_" . $FRAME;
+        my $GeneName = "$RowNewBed[0]-$RowNewBed[1]-$RowNewBed[2]-" . $FRAME;
         
         # test if orientation of gene
         if ($RowNewBed[1] < $RowNewBed[2]){
@@ -567,10 +568,12 @@ $NewBedName = $PREFIX . $NewBedName . '_NewCandidates.bed';
 @NewDetected = sort @NewDetected;
 open(FH, '>', $NewBedName) or die $!;
 	foreach (@selectedGenes){
-		my @newBEDrow = (split '_', $_, 4);
+		my @newBEDrow = (split '-', $_, 4);
 		print FH "$newBEDrow[0]\t$newBEDrow[1]\t$newBEDrow[2]\n";
 	}
 close(FH);
+
+
 
 ### WORKER PROTEIN -------------------------------------------------------------
 
@@ -700,4 +703,3 @@ open(FH, '>', $DomainFile) or die $!;
 		}
             }
 close(FH);
-
