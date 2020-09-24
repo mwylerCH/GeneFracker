@@ -27,7 +27,8 @@ GetOptions(
     'targeted' => \my $PRECISON,
     'pfamID' => \my $PFAMID,
     'help'     =>   sub { HelpMessage(0) },
-    'userCustom=s' => \my $CUSTOM 
+    'userCustom=s' => \my $CUSTOM,
+    'xframe' => \my $ALLFRAME,
 ) or HelpMessage(1);
 
 # check presence of mandatory inputs
@@ -53,7 +54,8 @@ Optional Arguments
   --softmasked, -s       Skip softmasked regions of the genome (optional)
   --targeted, -t      	 Filter new candidates based on domains of the alignment, only for FASTA aln (optional)
   --userCustom, -u       Filter new candidates based on user preference, eg "C2,PRT_C" (optional) 
-  --pfamID, -p		       Output Pfam ID instead of domain name (optional, omitted for --targeted)
+  --pfamID, -p		     Output Pfam ID instead of domain name (optional, omitted for --targeted)
+  --xframe, -x           Scan all possible frames of the annotated genes (optional, more time needed)
 
 Help
 
@@ -236,8 +238,8 @@ if (defined $GFF){
 		    my $GENEstart = $gffRow[3] - 1;
 		    # gene name (search and slice)
 		    my @attributeCol = split(';', $gffRow[8]);
-		    my $geneCol = int(grep { 'gene' } @row) -1;
-		    my $shortName = @attributeCol[$geneCol];
+		    my $geneCol = int(grep { 'gene' } @attributeCol) -1;
+		    my $shortName = $attributeCol[$geneCol];
 		    $shortName =~ s/gene_id//; 
 		    $shortName =~ s/"//g; 
 		    $shortName =~ s/ //g; 
@@ -584,9 +586,11 @@ if (! defined $FULL){
     exit;
 }
 
-# cut out pieces and merge into a new Hash
+# test if annotated genes need to be converted in all 3 frames (for low quality annotation) 
 my %Genes;
-foreach (@BEDgene) {
+
+if (defined $ALLFRAME){
+    foreach (@BEDgene) {
 	foreach my $FRAME (1, 2, 3){
 		my @bedRow = (split ' ', $_);
 		## FORWARD
@@ -626,6 +630,47 @@ foreach (@BEDgene) {
 	}
 	} 
 
+    }	
+} else {
+# if not requested with --xframe do inly 1 and -1 frames
+    foreach (@BEDgene) {
+            my @bedRow = (split ' ', $_);
+            ## FORWARD
+        if ($_ =~ /\+/) {
+            my $GeneName = $bedRow[3] . '_1';
+                #coordinates for cutting
+                    my $Chromosome = $bedRow[0];
+                    my $StartCut = $bedRow[1];
+                    my $CutLen = $bedRow[2]-$bedRow[1];
+                    # cut
+                    my $GenePiece = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+                    #add to hash
+                    if(exists($Genes{"$GeneName"})) {
+                        $Genes{"$GeneName"} = $Genes{"$GeneName"} . $GenePiece;
+                    }else{
+                        $Genes{"$GeneName"} = $GenePiece;
+                    } 
+        } else {
+            ## REVERSE
+            my $GeneName = $bedRow[3] . '_-1';
+                #coordinates for cutting
+                    my $Chromosome = $bedRow[0];
+                    my $StartCut = $bedRow[1];
+                    my $CutLen = $bedRow[2]-$bedRow[1];
+                    # cut
+                    my $GenePiece = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+            # reverse
+            $GenePiece = reverse $GenePiece;
+            # complement
+            $GenePiece =~ tr/ACGTacgt/TGCAtgca/;
+            # add to hash
+            if(exists($Genes{"$GeneName"})) {
+                $Genes{"$GeneName"} = $Genes{"$GeneName"} . $GenePiece;
+            }else{
+                $Genes{"$GeneName"} = $GenePiece;
+            }
+        }
+    } 
 }	
 
 ### convert DNA to AA
