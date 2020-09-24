@@ -234,8 +234,10 @@ if (defined $GFF){
 		# filter for 'CDS'
 		if ($gffRow[2] eq 'CDS'){
 		    my $GENEstart = $gffRow[3] - 1;
-		    # gene name
-		    my $shortName = (split ';', $gffRow[8])[1];
+		    # gene name (search and slice)
+		    my @attributeCol = split(';', $gffRow[8]);
+		    my $geneCol = int(grep { 'gene' } @row) -1;
+		    my $shortName = @attributeCol[$geneCol];
 		    $shortName =~ s/gene_id//; 
 		    $shortName =~ s/"//g; 
 		    $shortName =~ s/ //g; 
