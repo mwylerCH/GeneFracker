@@ -297,7 +297,7 @@ if (defined $PRECISON){
 	}
 	# test if its not empty (aka no domain found)
 	if (length($TARGETdomain) != 0 ){
-        $FRASE =~ s/ //g ;
+        $TARGETdomain =~ s/ //g ;
         $TARGETdomain =~ s/^/^(?=.*/ ;
         $TARGETdomain =~ s/,/)(?=.*/g ;
         $TARGETdomain =~ s/$/)/ ; 
