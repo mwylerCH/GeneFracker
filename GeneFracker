@@ -1,0 +1,703 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+use English;
+use File::Temp qw/ tempdir /;
+use Getopt::Long 'HelpMessage';
+use File::Basename;
+use Cwd;
+use POSIX;
+
+
+### INPUT -------------------------------------------------------------
+
+# getwd
+my $dir = getcwd . "/";
+
+# test input on the command line
+GetOptions(
+    'n=i' => \(my $NRcores = 6),
+    'Fasta=s' => \my $FASTA,
+    'annotation=s' => \my $GFF,
+    'GeneAln=s' => \my $ALIGNMENT,
+    'complete' => \my $FULL,
+    'outPrefix=s' => \my $PREFIX,
+    'softmasked' => \my $SOFT,
+    'targeted' => \my $PRECISON,
+    'pfamID' => \my $PFAMID,
+    'help'     =>   sub { HelpMessage(0) },
+    'userCustom=s' => \my $CUSTOM 
+) or HelpMessage(1);
+
+# check presence of mandatory inputs
+HelpMessage(1) unless $FASTA;
+HelpMessage(1) unless $ALIGNMENT;
+
+
+=head1 NAME
+
+Annotation tester
+
+=head1 SYNOPSIS
+
+  --Fasta, -F            Genome Files in fasta format (required)
+  --GeneAln, -G          Aligned Genes of interest (required)
+  
+Optional Arguments
+
+  -n                     Used cores (default 6)
+  --annotation, -a       Gene annotation in GTF format (recommended, required for '--complete')
+  --outPrefix, -o        Prefix of the output files, allows redirection (optional)
+  --complete, -c         Run full pipeline DNA and protein (optional, run only once)
+  --softmasked, -s       Skip softmasked regions of the genome (optional)
+  --targeted, -t      	 Filter new candidates based on domains of the alignment, only for FASTA aln (optional)
+  --userCustom, -u       Filter new candidates based on user preference, eg "C2,PRT_C" (optional) 
+  --pfamID, -p		       Output Pfam ID instead of domain name (optional, omitted for --targeted)
+
+Help
+
+  --help, -h             Print this help
+  
+=head1 VERSION
+
+0.01
+
+=cut
+
+
+
+# define hash with codons
+my %CodonTable = ('TTT' => 'F',
+	'TCT' => 'S',
+	'TAT' => 'Y',
+	'TGT' => 'C',
+	'TTC' => 'F',
+	'TCC' => 'S',
+	'TAC' => 'Y',
+	'TGC' => 'C',
+	'TTA' => 'L',
+	'TCA' => 'S',
+	'TAA' => 'X',
+	'TGA' => 'X',
+	'TTG' => 'L',
+	'TCG' => 'S',
+	'TAG' => 'X',
+	'TGG' => 'W',
+	'CTT' => 'L',
+	'CCT' => 'P',
+	'CAT' => 'H',
+	'CGT' => 'R',
+	'CTC' => 'L',
+	'CCC' => 'P',
+	'CAC' => 'H',
+	'CGC' => 'R',
+	'CTA' => 'L',
+	'CCA' => 'P',
+	'CAA' => 'Q',
+	'CGA' => 'R',
+	'CTG' => 'L',
+	'CCG' => 'P',
+	'CAG' => 'Q',
+	'CGG' => 'R',
+	'ATT' => 'I',
+	'ACT' => 'T',
+	'AAT' => 'N',
+	'AGT' => 'S',
+	'ATC' => 'I',
+	'ACC' => 'T',
+	'AAC' => 'N',
+	'AGC' => 'S',
+	'ATA' => 'I',
+	'ACA' => 'T',
+	'AAA' => 'K',
+	'AGA' => 'R',
+	'ATG' => 'M',
+	'ACG' => 'T',
+	'AAG' => 'K',
+	'AGG' => 'R',
+	'GTT' => 'V',
+	'GCT' => 'A',
+	'GAT' => 'D',
+	'GGT' => 'G',
+	'GTC' => 'V',
+	'GCC' => 'A',
+	'GAC' => 'D',
+	'GGC' => 'G',
+	'GTA' => 'V',
+	'GCA' => 'A',
+	'GAA' => 'E',
+	'GGA' => 'G',
+	'GTG' => 'V',
+	'GCG' => 'A',
+	'GAG' => 'E',
+	'GGG' => 'G',
+	'GTN' => 'V',
+   	'TCN' => 'S',
+    	'CCN' => 'P',
+    	'ACN' => 'T',
+    	'GCN' => 'A',
+    	'GGN' => 'G',
+	'CGN' => 'R');
+
+### Define SUBROUTINES -------------------------------------------------------------
+
+# converts DNA hash to AA hash
+sub DNAtoAA {
+	# input need to be a hash containing DNA fasta
+	my %DNAhash = @_ ;
+	my %AAhash ;
+	# translate each sequence 
+	foreach my $header (keys %DNAhash){
+		my $DNAsequence = $DNAhash{$header};
+		# get length of the sequence
+		my $GeneLen = length $DNAsequence;
+		# take one triplet after the other
+  		for (my $i=0; $i <= $GeneLen; $i += 3){
+        		my $triplet = substr($DNAsequence, $i, 3); # 3 nucleotides
+        		if(exists($CodonTable{"$triplet"})) { # remove last nucleotides
+        		    $AAhash{"$header"} .= $CodonTable{"$triplet"};
+        		    }
+        	}
+	}
+	return %AAhash ;
+}
+
+# check presence of Pfam dataset and download in case
+sub checkPfam{
+	unless (-e 'Pfam-A.hmm') {
+		print "No Pfam-A.hmm file detected. \nTry to download and press.\n";
+		system 'rm -f Pfam-A.hmm.h3p; rm -f Pfam-A.hmm.h3m ; rm -f Pfam-A.hmm.h3f ; rm -f Pfam-A.hmm.h3i';
+		system 'wget --quiet ftp://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam33.0/Pfam-A.hmm.gz -O Pfam-A.hmm.gz';
+		if (-e 'Pfam-A.hmm.gz') {
+			system 'gunzip Pfam-A.hmm.gz';
+			system 'hmmpress Pfam-A.hmm';
+		}else{
+			print "ERROR: Unable to donwload the Pfam database.\n";
+			print "Check the internet connection or copy manually the DB in the current folder.\n";
+		exit;
+		}
+	}
+}
+
+### WORKER DEPENDENCY and INPUTS -------------------------------------------------------------
+
+# test if user want redirection of output
+if (! defined $PREFIX){
+    $PREFIX = $dir;
+}
+
+# test if GNU parallel is installed
+if ( (`parallel -h`)[0] !~ /^Usage/ ) {
+	print "GNU parallel seems not installed.\n";
+	print "Try 'sudo apt-get install parallel'.\n";
+}
+
+# test if hmm is installed
+if ( (`hmmsearch`)[1] !~ /^Usage/ ) {
+	print "hmmer seems not installed.\n";
+	print "Try 'sudo apt-get install hmmer'.\n";
+}
+
+# test if --custom and --targeted are not both require
+if (defined $PRECISON && defined $CUSTOM) {
+	print "ERROR: --custom and --targeted cannot be used togheter.\n";
+	exit;
+}
+
+
+
+### read in gtf as bed (into array @BEDgene)
+my @BEDgene;
+# test if annotation is supplied
+if (defined $GFF){
+	# unzip if needed
+	if ($GFF =~ /.gz$/) {
+	    open(IN, "gunzip -c $GFF |") or die "can't open $GFF";
+	}
+	else {
+	    open(IN, $GFF) or die "can't open $GFF";
+	}
+
+	# feed bed array with gff annotation (keep only "gene" features)
+	while(<IN>){
+	    chomp;
+	    # don't keep lines with comments
+	    if ($_ !~ m/^#/){
+		# make one array for each row
+		my @gffRow = (split ' ', $_, 9);
+		# test if annotation is in GTF format (aka should not contain 'mRNA')
+		if ($gffRow[2] eq 'mRNA'){
+			print "ERROR: $GFF contains 'mRNA', GTF should not contain this kind of information\n";
+			exit;
+		}
+		# filter for 'CDS'
+		if ($gffRow[2] eq 'CDS'){
+		    my $GENEstart = $gffRow[3] - 1;
+		    # gene name
+		    my $shortName = (split ';', $gffRow[8])[1];
+		    $shortName =~ s/gene_id//; 
+		    $shortName =~ s/"//g; 
+		    $shortName =~ s/ //g; 
+		    push(@BEDgene, "$gffRow[0]\t$GENEstart\t$gffRow[4]\t$shortName\t$gffRow[6]\n");
+		}
+	    }
+	}
+	close (IN);
+	# test if at least one entry is described as CDS
+	if (scalar @BEDgene == 0){
+		print "ERROR: No CDS feature found.\n";
+		print "Check if $GFF is in GTF format.\n";
+		exit;
+	}
+}else{
+	# if no annotation is supplied, no '--complete' possible
+	undef $FULL;
+}
+
+
+### Read in Genome
+## read input sequence inside an HASH (geneID "\t" fasta)
+
+# unzip if needed
+if ($FASTA =~ /.gz$/) {
+    open(IN, "gunzip -c $FASTA |") or die "can't open $FASTA";
+}
+else {
+    open(IN, $FASTA) or die "can't open $FASTA";
+}
+## read input sequence inside an hash
+
+my %seqs = ();
+my $header = '';
+
+while (my $line = <IN>){
+    chomp $line;
+    $line =~ s/^\s*$//;
+    if ($line =~ m/^>(.*)$/){
+        # remove sequence description from header
+        $header = (split ' ', $1)[0];
+    } else {
+        $seqs{"$header"} .= $line;
+    }
+}
+close (IN);
+my %UnmaskedSeq = %seqs;
+
+### ALIGNMENT SCANNER -------------------------------------------------------------
+
+my $TARGETdomain ;
+if (defined $PRECISON){
+	my $FRACKERPATH = dirname $0;
+	$TARGETdomain = `perl $FRACKERPATH/alignmentScanner.pl $ALIGNMENT $NRcores`;
+	# test if secondary script worked
+	if ($TARGETdomain =~ /^ERROR/){
+		print "$TARGETdomain\n";
+		exit;
+	}
+	# test if its not empty (aka no domain found)
+	if (length($TARGETdomain) != 0 ){
+        $FRASE =~ s/ //g ;
+        $TARGETdomain =~ s/^/^(?=.*/ ;
+        $TARGETdomain =~ s/,/)(?=.*/g ;
+        $TARGETdomain =~ s/$/)/ ; 
+    }else{
+        $TARGETdomain = ".*";
+    }
+	
+	
+	# PROVVISIONAL: suppress --pfamID if targeted is requested
+	if (defined $PFAMID){
+        undef $PFAMID;
+        print "###################################################################################################\n";
+        print "WARNING: '--pfamID' not possible with '--targeted'\n";
+        print "###################################################################################################\n";
+	}
+	
+}else{
+    # if --targeted not 
+	$TARGETdomain = ".*";
+}
+
+### CUSTOM -------------------------------------------------------------
+
+if (defined $CUSTOM){
+	if (length($CUSTOM) != 0 ){
+		$TARGETdomain = $CUSTOM;
+	        $TARGETdomain =~ s/^/^(?=.*/ ;
+	        $TARGETdomain =~ s/,/)(?=.*/g ;
+	        $TARGETdomain =~ s/$/)/ ;
+	}else{
+		print "ERROR: --custom used without description\n";
+		exit;
+	}
+}	
+
+### WORKER DNA -------------------------------------------------------------
+
+### hard MASKING 
+foreach (@BEDgene){
+    my @bedRow = (split ' ', $_, 8);
+    my $Chromosome = $bedRow[0];
+    my $start = $bedRow[1];
+    my $maskLen = $bedRow[2]-$start;
+    my $MASK = 'N'x$maskLen;
+    # test if chromosome is available (aka annotation and fasta use same names)
+    if(exists($seqs{$Chromosome})) {
+    	substr($seqs{$Chromosome} , $start, $maskLen) = $MASK;
+            }else{
+            print "ERROR: Make sure that chromosomes have the same name in annotation and fasta.\n";
+   	    exit; 
+            }  
+}
+
+
+## softmasking if required
+if (defined $SOFT){
+	foreach my $KEY (keys %seqs){
+		$seqs{$KEY} =~ s/[a-z]/N/g ;
+	}
+}
+
+ 
+# DNA SCANS -------
+# Build DNA alignment
+if (-e $ALIGNMENT) {
+    system "hmmbuild ${ALIGNMENT}_hmm $ALIGNMENT";
+}else{
+    print "ERROR: $ALIGNMENT not found.";
+    print "Check if paths are correct.";
+    exit;
+}
+
+# print hard masked genome as TEMP file
+my $HardMaskedGenome = $FASTA . "_hardMasked" ;
+open(FH, '>', $HardMaskedGenome) or die $!;
+    my $HASHkey;
+    my $HASHvalue;
+    while (  ($HASHkey, $HASHvalue) = each %seqs ) {
+        print FH ">$HASHkey\n$HASHvalue\n";
+    }
+close(FH);
+
+# DNA scan
+my $DNAscanReults = $ALIGNMENT . "_dnaScan";
+system "nhmmer --cpu $NRcores --tblout $DNAscanReults ${ALIGNMENT}_hmm $HardMaskedGenome";
+
+# Parse new detected genes into bed format...
+my @NewDetected ; 
+open(FH, '<', $DNAscanReults) or die "Can't open '$DNAscanReults': $!";;
+    while (<FH>) {
+    if ($_ !~ '#'){
+        chomp;
+        my @HMMrow = (split ' ', $_);
+        my $NewGeneName = 'NewDetected_' . $HMMrow[2];
+        push(@NewDetected, "$HMMrow[0]\t$HMMrow[6]\t$HMMrow[7]\t$NewGeneName");
+        }
+    }
+close(FH); 
+
+# remove temporary files
+system "rm -f $HardMaskedGenome";
+system "rm -f ${ALIGNMENT}_hmm";
+system "rm -f $DNAscanReults";
+
+# DNA SCANS translation -------
+
+# cut into new hash
+my %AA6frame;
+
+foreach my $FRAME (1, 2, 3){
+    foreach (@NewDetected) {
+        # make name based on coordinates
+        my @RowNewBed = (split ' ', $_);
+        my $GeneName = "$RowNewBed[0]_$RowNewBed[1]_$RowNewBed[2]_" . $FRAME;
+        
+        # test if orientation of gene
+        if ($RowNewBed[1] < $RowNewBed[2]){
+            #coordinates for cutting
+            my $Chromosome = $RowNewBed[0];
+            my $StartCut = $RowNewBed[1] + $FRAME - 1;
+            my $CutLen = $RowNewBed[2]-$RowNewBed[1];
+            # cut
+            my $NewSequence = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+            #add to hash
+            if(exists($AA6frame{"$GeneName"})) {
+                $AA6frame{"$GeneName"} = $AA6frame{"$GeneName"} . $NewSequence;
+                }else{
+                $AA6frame{"$GeneName"} = $NewSequence;
+                } 
+        } else {    
+        
+        # for revers detected genes
+        my $Chromosome = $RowNewBed[0];
+        my $StartCut = $RowNewBed[2] - $FRAME + 1;
+        my $CutLen = $RowNewBed[1]-$RowNewBed[2];
+        # cut
+        my $NewSequence = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+        # reverse
+        $NewSequence = reverse $NewSequence;
+        # complement
+        $NewSequence =~ tr/ACGTacgt/TGCAtgca/;
+        # add to hash
+        if(exists($AA6frame{"$GeneName"})) {
+            $AA6frame{"$GeneName"} = $AA6frame{"$GeneName"} . $NewSequence;
+            }else{
+            $AA6frame{"$GeneName"} = $NewSequence;
+            }        
+      }
+}
+}
+
+### convert DNA to AA
+# cut single triplets, translate and add to new 'Protein' hash
+my %NewProtein = &DNAtoAA (%AA6frame) ;
+    
+# split up Proteins into temporary folder ...
+my $TEMPNewPutativeGenes = tempdir( DIR => $dir, CLEANUP => 1 ); 
+my $NewProteinName;
+my $NewProteinSequence;
+
+# ... depending of $nr coreas available
+my $NRfasta = keys %NewProtein;
+my $FastaPerFile = ceil($NRfasta/$NRcores);
+my $counter = 0;
+my $FILE_NR = 0;
+
+while ( ($NewProteinName, $NewProteinSequence) = each %NewProtein ) {
+		if ($counter < $FastaPerFile){
+			$counter++;
+			my $FILE = $TEMPNewPutativeGenes . '/fastaSet' . $FILE_NR . ".fa" ;
+		        open(FH, '>>', $FILE) or die $!;
+		        print FH ">$NewProteinName\n$NewProteinSequence\n";
+		        close(FH);
+		    }else{
+			$counter=0;
+		        $FILE_NR++ ;
+		        my $FILE = $TEMPNewPutativeGenes . '/fastaSet' . $FILE_NR  . ".fa" ;
+		        open(FH, '>>', $FILE) or die $!;
+		        print FH ">$NewProteinName\n$NewProteinSequence\n";
+		        close(FH);
+	}
+}
+
+### new gene scan -----
+
+# test if Pfam files are available
+&checkPfam;
+
+# run HMM on parallel
+my $TEMPhammerOut_newGene = tempdir( DIR => $dir, CLEANUP => 1 ); 
+system "ls $TEMPNewPutativeGenes/* | parallel -j$NRcores 'hmmsearch --tblout $TEMPhammerOut_newGene/{/} -E 1e-5 --cpu 1 Pfam-A.hmm {}' ";
+
+# parse HMM results of new detected genes -----
+# get results name
+my @hammerOutFiles_newGene = glob("$TEMPhammerOut_newGene" . "/*.*");
+
+# test if user want Pfam name or ID
+my $EXTRACTcol;
+if (defined $PFAMID){
+	$EXTRACTcol = 3;
+}else{
+	$EXTRACTcol = 2;
+}
+
+# make one hash containing gene name and detected domains
+my %HammerOutput_newGene;
+
+foreach (@hammerOutFiles_newGene) {
+    # open each file...
+    open(FH, "<$_");
+    # ...and read line by line
+    while (<FH>){
+      if ($_ !~ '#'){
+        chomp;
+        my @HMMrow = (split ' ', $_);
+        my $GeneName = $HMMrow[0];
+        # add all domain in one row, comma separated
+        if(exists($HammerOutput_newGene{"$GeneName"})) {
+            $HammerOutput_newGene{"$GeneName"} = $HammerOutput_newGene{"$GeneName"} . ', ' . $HMMrow[$EXTRACTcol];
+        }else{
+            $HammerOutput_newGene{"$GeneName"} = $HMMrow[$EXTRACTcol];
+            }
+        }
+    }
+    close(FH);
+}
+
+# make list with coordinates to keep
+my @selectedGenes;
+
+# print out gene-Domain table
+my $newGenePfamFile = basename($ALIGNMENT);
+# remove file extension
+$newGenePfamFile =~ s/\.[^.]+$//;
+$newGenePfamFile = $PREFIX . $newGenePfamFile . '_NewCandidates_PfamClassified.txt';
+open(FH, '>', $newGenePfamFile) or die $!;
+    my $NewGeneID;
+    my $newPFAM;
+    while (  ($NewGeneID, $newPFAM) = each %HammerOutput_newGene ) {
+		# filter results
+		if ($newPFAM =~ /$TARGETdomain/){
+        		print FH "$NewGeneID\t$newPFAM\n";
+			push(@selectedGenes, $NewGeneID);
+		}
+	}
+close(FH);
+
+### print out fasta file for the new detected genes with 3 frames 
+# print out gene-Domain table
+my $NewFasta = basename($ALIGNMENT);
+# remove file extension
+$NewFasta =~ s/\.[^.]+$//;
+$NewFasta = $PREFIX . $NewFasta . '_NewCandidates.fa';
+open(FH, '>', $NewFasta) or die $!;
+	foreach (@selectedGenes){
+		my $HeaderNew = $_;
+		my $SequenceNew = $AA6frame{$_};
+		print FH ">$HeaderNew\n$SequenceNew\n";
+	}
+close(FH);
+
+# print bed of the new genes
+my $NewBedName = basename($ALIGNMENT);
+# remove file extension
+$NewBedName =~ s/\.[^.]+$//;
+$NewBedName = $PREFIX . $NewBedName . '_NewCandidates.bed';
+@NewDetected = sort @NewDetected;
+open(FH, '>', $NewBedName) or die $!;
+	foreach (@selectedGenes){
+		my @newBEDrow = (split '_', $_, 4);
+		print FH "$newBEDrow[0]\t$newBEDrow[1]\t$newBEDrow[2]\n";
+	}
+close(FH);
+
+### WORKER PROTEIN -------------------------------------------------------------
+
+# check if user requires protein scan of annotated genes
+if (! defined $FULL){
+    exit;
+}
+
+# cut out pieces and merge into a new Hash
+my %Genes;
+foreach (@BEDgene) {
+	foreach my $FRAME (1, 2, 3){
+		my @bedRow = (split ' ', $_);
+		## FORWARD
+	if ($_ =~ /\+/) {
+		my $GeneName = $bedRow[3] . '_' . $FRAME;
+	    	#coordinates for cutting
+            	my $Chromosome = $bedRow[0];
+            	my $StartCut = $bedRow[1] + $FRAME - 1;
+            	my $CutLen = $bedRow[2]-$bedRow[1];
+            	# cut
+            	my $GenePiece = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+            	#add to hash
+            	if(exists($Genes{"$GeneName"})) {
+            	    $Genes{"$GeneName"} = $Genes{"$GeneName"} . $GenePiece;
+                }else{
+            	    $Genes{"$GeneName"} = $GenePiece;
+                } 
+	} else {
+		## REVERSE
+		my $GeneName = $bedRow[3] . '_-' . $FRAME;
+	    	#coordinates for cutting
+            	my $Chromosome = $bedRow[0];
+            	my $StartCut = $bedRow[1] + $FRAME - 1;
+            	my $CutLen = $bedRow[2]-$bedRow[1];
+            	# cut
+            	my $GenePiece = substr($UnmaskedSeq{$Chromosome} , $StartCut, $CutLen);
+		# reverse
+		$GenePiece = reverse $GenePiece;
+		# complement
+		$GenePiece =~ tr/ACGTacgt/TGCAtgca/;
+		# add to hash
+		if(exists($Genes{"$GeneName"})) {
+		    $Genes{"$GeneName"} = $Genes{"$GeneName"} . $GenePiece;
+		}else{
+		    $Genes{"$GeneName"} = $GenePiece;
+		}
+	}
+	} 
+
+}	
+
+### convert DNA to AA
+my %Protein = &DNAtoAA (%Genes);
+
+#### PROTEIN Scan ------------------------------------------------------------------
+
+# split up Proteins into temporary folder ...
+my $TEMPproteinFolder = tempdir( DIR => $dir, CLEANUP => 1 ); 
+my $ProteinName;
+my $ProteinSequence;
+# ... depending of nr of cores available
+$NRfasta = keys %Protein;
+$FastaPerFile = ceil($NRfasta/$NRcores);
+$counter = 0;
+$FILE_NR = 0;
+
+while ( ($ProteinName, $ProteinSequence) = each %Protein ) {
+		if ($counter < $FastaPerFile){
+			$counter++;
+			my $FILE = $TEMPproteinFolder . '/fastaSet' . $FILE_NR . ".fa" ;
+		        open(FH, '>>', $FILE) or die $!;
+		        print FH ">$ProteinName\n$ProteinSequence\n";
+		        close(FH);
+		    }else{
+			$counter=0;
+		        $FILE_NR++ ;
+		        my $FILE = $TEMPproteinFolder . '/fastaSet' . $FILE_NR  . ".fa" ;
+		        open(FH, '>>', $FILE) or die $!;
+		        print FH ">$ProteinName\n$ProteinSequence\n";
+		        close(FH);
+	}
+}
+
+# run HMM on parallel
+my $TEMPhammerOut = tempdir ( DIR => $dir, CLEANUP => 1 ); 
+system "find $TEMPproteinFolder -type f -name '*.fa' | parallel -j$NRcores 'hmmsearch --tblout $TEMPhammerOut/{/} -E 1e-5 --cpu 1 Pfam-A.hmm {}' ";
+
+# get results name
+my @hammerOutFiles = glob("$TEMPhammerOut" . "/*.*");
+
+# make one hash containing gene name and detected domains
+my %HammerOutput;
+
+foreach (@hammerOutFiles) {
+    # open each file...
+    open(FH, "<$_");
+    # ...and read line by line
+    while (<FH>){
+      if ($_ !~ '#'){
+        chomp;
+        my @HMMrow = (split ' ', $_);
+        my $GeneName = $HMMrow[0];
+        # add all domain in one row, comma separated
+        if(exists($HammerOutput{"$GeneName"})) {
+            $HammerOutput{"$GeneName"} = $HammerOutput{"$GeneName"} . ', ' . $HMMrow[2];
+        }else{
+            $HammerOutput{"$GeneName"} = $HMMrow[2];
+            }
+        }
+    }
+    close(FH);
+}
+
+
+# print out gene-Domain table
+my $DomainFile = basename($FASTA);
+# remove file extension
+$DomainFile =~ s/\.[^.]+$//;
+$DomainFile = $PREFIX . $DomainFile . '_PfamClassified.txt';
+open(FH, '>', $DomainFile) or die $!;
+    my $GeneID;
+    my $PFAM;
+    while (  ($GeneID, $PFAM) = each %HammerOutput ) {
+		if ($PFAM =~ /$TARGETdomain/){
+            		print FH "$GeneID\t$PFAM\n";
+		}
+            }
+close(FH);
+
