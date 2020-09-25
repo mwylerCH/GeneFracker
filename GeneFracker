@@ -493,7 +493,7 @@ while ( ($NewProteinName, $NewProteinSequence) = each %NewProtein ) {
 
 # run HMM on parallel
 my $TEMPhammerOut_newGene = tempdir( DIR => $dir, CLEANUP => 1 ); 
-system "ls $TEMPNewPutativeGenes/* | parallel -j$NRcores 'hmmsearch --tblout $TEMPhammerOut_newGene/{/} -E 1e-5 --cpu 1 Pfam-A.hmm {}' ";
+system "find $TEMPNewPutativeGenes -type f -name '*.fa'| parallel -j$NRcores 'hmmsearch --tblout $TEMPhammerOut_newGene/{/} -E 1e-5 --cpu 1 Pfam-A.hmm {}' ";
 
 # parse HMM results of new detected genes -----
 # get results name
