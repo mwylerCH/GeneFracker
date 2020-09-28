@@ -183,7 +183,6 @@ close($fh);
 # output hammer scan in tmp file
 my $TEMPhammerOut_Alignment = tempdir( DIR => $dir, CLEANUP => 1 ); 
 system "hmmsearch --tblout $TEMPhammerOut_Alignment/hammerOut -E 1e-5 --cpu 1 Pfam-A.hmm $TEMPaaFasta >/dev/null 2>&1";
-system "cp $TEMPhammerOut_Alignment/hammerOut fuori";
 
 # read in domains for each gene
 my %HammerOutput;
