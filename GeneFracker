@@ -54,7 +54,7 @@ Optional Arguments
   --softmasked, -s       Skip softmasked regions of the genome (optional)
   --targeted, -t      	 Filter new candidates based on domains of the alignment, only for FASTA aln (optional)
   --userCustom, -u       Filter new candidates based on user preference, eg "C2,PRT_C" (optional) 
-  --pfamID, -p		     Output Pfam ID instead of domain name (optional, omitted for --targeted)
+  --pfamID, -p		 Output Pfam ID instead of domain name (optional, omitted for --targeted)
   --xframe, -x           Scan all possible frames of the annotated genes (optional, more time needed)
 
 Help
@@ -152,6 +152,7 @@ sub DNAtoAA {
 	# translate each sequence 
 	foreach my $header (keys %DNAhash){
 		my $DNAsequence = $DNAhash{$header};
+		$DNAsequence = uc($DNAsequence);
 		# get length of the sequence
 		my $GeneLen = length $DNAsequence;
 		# take one triplet after the other
