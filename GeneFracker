@@ -239,7 +239,7 @@ if (defined $GFF){
 		    my $GENEstart = $gffRow[3] - 1;
 		    # gene name (search and slice)
 		    my @attributeCol = split(';', $gffRow[8]);
-		    my $geneCol = int(grep { 'gene' } @attributeCol) -1;
+		    my $geneCol = int(grep { 'gene_id' } @attributeCol) -1;
 		    my $shortName = $attributeCol[$geneCol];
 		    $shortName =~ s/gene_id//; 
 		    $shortName =~ s/"//g; 
