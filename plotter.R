@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript 
 pdf(NULL)
 args <- commandArgs(TRUE)
 TABLE <- args[1]
