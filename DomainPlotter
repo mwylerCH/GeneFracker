@@ -29,7 +29,7 @@ HelpMessage(1) unless $FASTA;
 
 =head1 NAME
 
-Annotation tester
+Plot Domains position inside candidate genes
 
 =head1 SYNOPSIS
 
