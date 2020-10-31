@@ -280,7 +280,7 @@ my $SCRIPTPATH = dirname($0);
 my $PlotName = getcwd() . "/". $PREFIX . "DomainPlot.pdf";
 
 
-system "Rscript $SCRIPTPATH/plotter.R $DomCoordinates $PlotName";
+system "Rscript $SCRIPTPATH/subScriptPlotting $DomCoordinates $PlotName";
 
 
 
