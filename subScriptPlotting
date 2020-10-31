@@ -1,4 +1,7 @@
 #!/usr/bin/env Rscript 
+# Embedded R script for domain plotting
+# Wyler Michele, October 30th 2020
+
 pdf(NULL)
 args <- commandArgs(TRUE)
 TABLE <- args[1]
@@ -6,6 +9,10 @@ OUTPLOT <- args[2]
 suppressMessages(suppressWarnings(require(tidyverse)))
 
 tabella <- read.delim(TABLE, sep = '\t', header = T)
+
+if (nrow(tabella) == 0){
+  stop("No Domains found in supplied fasta.", call. = F)
+}
 
 tabella %>%
   mutate(MidPoint = (Start+End)/2,
