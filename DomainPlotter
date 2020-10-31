@@ -35,8 +35,6 @@ Plot Domains position inside candidate genes
 
   --Fasta, -F            Genes of interest in fasta format (required)
   --outPrefix, -o        Prefix of the output files, allows redirection (optional)
-  
-Help
   --help, -h             Print this help
   
 =head1 VERSION
@@ -281,8 +279,3 @@ my $PlotName = getcwd() . "/". $PREFIX . "DomainPlot.pdf";
 
 
 system "Rscript $SCRIPTPATH/subScriptPlotting $DomCoordinates $PlotName";
-
-
-
-
-
