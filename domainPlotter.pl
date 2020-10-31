@@ -1,4 +1,6 @@
 #!/usr/bin/perl
+# Domain plotting for candidates CDS
+# Wyler Michele, October 31th 2020
 
 use warnings;
 use strict;
