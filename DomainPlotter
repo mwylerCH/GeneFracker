@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 # Domain plotting for candidates CDS
-# Wyler Michele, October 31th 2020
 
 use warnings;
 use strict;
@@ -29,12 +28,14 @@ HelpMessage(1) unless $FASTA;
 
 =head1 NAME
 
-Plot Domains position inside candidate genes
+Annotation tester
 
 =head1 SYNOPSIS
 
   --Fasta, -F            Genes of interest in fasta format (required)
   --outPrefix, -o        Prefix of the output files, allows redirection (optional)
+  
+Help
   --help, -h             Print this help
   
 =head1 VERSION
@@ -266,7 +267,7 @@ open(IN, $HMMOUT ) or die "can't open $HMMOUT";
 close(IN);
 
 # print out coordinates
-my $DomCoordinates = $TEMPfolderOutput . '/DomainCoordinates.txt';
+my $DomCoordinates = $Prefix . 'DomainCoordinates.txt';
 foreach (@HMMtable) {
 	open(FH, '>>', $DomCoordinates) or die $!;
 	print FH "$_\n";
@@ -275,7 +276,6 @@ foreach (@HMMtable) {
 
 # plot 
 my $SCRIPTPATH = dirname($0);
-my $PlotName = getcwd() . "/". $PREFIX . "DomainPlot.pdf";
-
+my $PlotName = $PREFIX . "DomainPlot.pdf";
 
 system "Rscript $SCRIPTPATH/subScriptPlotting $DomCoordinates $PlotName";
