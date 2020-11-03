@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 # Domain plotting for candidates CDS
+# Wyler Michele, October 31th 2020
 
 use warnings;
 use strict;
@@ -267,12 +268,12 @@ open(IN, $HMMOUT ) or die "can't open $HMMOUT";
 close(IN);
 
 # print out coordinates
-my $DomCoordinates = $Prefix . 'DomainCoordinates.txt';
+my $DomCoordinates = $PREFIX . 'DomainCoordinates.txt';
+open(FH, '>', $DomCoordinates) or die $!;
 foreach (@HMMtable) {
-	open(FH, '>>', $DomCoordinates) or die $!;
 	print FH "$_\n";
-	close(FH);
 }
+close(FH);
 
 # plot 
 my $SCRIPTPATH = dirname($0);
