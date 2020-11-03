@@ -14,17 +14,22 @@ if (nrow(tabella) == 0){
   stop("No Domains found in supplied fasta.", call. = F)
 }
 
-tabella %>%
-  mutate(MidPoint = (Start+End)/2,
-         # geneName = factor(geneName, levels = unique(geneName)),
-         geneLength = geneLength) %>% 
+tabella %>% 
+  distinct() %>% 
+  mutate(Start = as.numeric(as.character(Start)),
+         End = as.numeric(as.character(End)),
+         geneLength = as.numeric(as.character(geneLength)),
+    MidPoint = (Start+End)/2) %>% 
   ggplot()+
   geom_segment(aes(y=geneName, yend = geneName,
                    x=1 , xend = geneLength))+
   geom_rect(aes(xmin = Start, xmax = End,
                 ymin = as.numeric(geneName)-0.2, ymax = as.numeric(geneName)+0.2,
-                fill = Domain))+
-  geom_text(aes(y=geneName, x = MidPoint, label = Domain), size = 4)+
+                fill = Domain),
+            color = 'black')+
+  geom_text(aes(y=geneName, x = MidPoint, label = Domain), 
+            size = 4,
+            position=position_jitter(width=0,height=0))+
   theme_minimal()+
   theme(panel.grid = element_blank(),
         axis.text = element_text(color = 'black'))+
@@ -32,6 +37,6 @@ tabella %>%
        x = '') +
   theme(legend.position="none",
         axis.text.y = element_text(size = 10),
-        )
-Hplot <- nrow(tabella)*0.05
-suppressMessages(suppressWarnings(ggsave(OUTPLOT, width = 20, height = Hplot, limitsize = FALSE)))
+)
+Hplot <- nrow(tabella)*0.1
+suppressMessages(suppressWarnings(ggsave(OUTPLOT, width = 30, height = Hplot, limitsize = FALSE)))
