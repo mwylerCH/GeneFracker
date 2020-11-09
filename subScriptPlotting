@@ -39,4 +39,5 @@ tabella %>%
         axis.text.y = element_text(size = 10),
 )
 Hplot <- nrow(tabella)*0.1
+Hplot <- ifelse(Hplot <= 30, 30, Hplot)
 suppressMessages(suppressWarnings(ggsave(OUTPLOT, width = 30, height = Hplot, limitsize = FALSE)))
