@@ -1,13 +1,16 @@
 #!/usr/bin/env Rscript 
 # Embedded R script for domain plotting
-# Wyler Michele, October 31th 2020
 
 pdf(NULL)
 args <- commandArgs(TRUE)
 TABLE <- args[1]
 OUTPLOT <- args[2]
-suppressMessages(suppressWarnings(require(tidyverse)))
-
+if (!isTRUE(suppressMessages(suppressWarnings(require(ggplot2))))) {
+  stop("The package 'ggplot2' was not found, plotting will not be performed. You can use the DomainCoordinates.txt file to plot externally", call. = F)
+}
+if (!isTRUE(suppressMessages(suppressWarnings(require(dplyr))))) {
+  stop("The package 'dplyr' was not found, plotting will not be performed. You can use the DomainCoordinates.txt file to plot externally", call. = F)
+}
 tabella <- read.delim(TABLE, sep = '\t', header = T)
 
 if (nrow(tabella) == 0){
@@ -19,7 +22,7 @@ tabella %>%
   mutate(Start = as.numeric(as.character(Start)),
          End = as.numeric(as.character(End)),
          geneLength = as.numeric(as.character(geneLength)),
-    MidPoint = (Start+End)/2) %>% 
+         MidPoint = (Start+End)/2) %>% 
   ggplot()+
   geom_segment(aes(y=geneName, yend = geneName,
                    x=1 , xend = geneLength))+
@@ -37,7 +40,7 @@ tabella %>%
        x = '') +
   theme(legend.position="none",
         axis.text.y = element_text(size = 10),
-)
+  )
 Hplot <- nrow(tabella)*0.1
 Hplot <- ifelse(Hplot <= 30, 30, Hplot)
 suppressMessages(suppressWarnings(ggsave(OUTPLOT, width = 30, height = Hplot, limitsize = FALSE)))
