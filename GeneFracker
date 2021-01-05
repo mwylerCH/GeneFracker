@@ -736,6 +736,8 @@ foreach (@hammerOutFiles) {
     close(FH);
 }
 
+# list of annotated genes to print out
+my @GenesToKeep;
 
 # print out gene-Domain table
 my $DomainFile = basename($FASTA);
@@ -748,6 +750,25 @@ open(FH, '>', $DomainFile) or die $!;
     while (  ($GeneID, $PFAM) = each %HammerOutput ) {
 		if ($PFAM =~ /$TARGETdomain/){
             		print FH "$GeneID\t$PFAM\n";
+			# make list of genes to keep and print out
+			push(@GenesToKeep, $GeneID)
 		}
             }
+close(FH);
+
+# Print out fasta
+my $FastaFile = basename($FASTA);
+# remove file extension
+$FastaFile =~ s/\.[^.]+$//;
+$FastaFile = $PREFIX . $FastaFile . '_Annotated';
+
+open(FH, '>', $FastaFile) or die $!;
+	foreach (@GenesToKeep){
+	#$_ =~ s/^.*://;
+	my $FastaHeader = $_ ;
+        $FastaHeader =~ s/^.*://;
+        $FastaHeader =~ s/_.*$//;
+	my $FastaSeq = $Genes{"$_"};
+	print FH ">$FastaHeader\n$FastaSeq";
+	}
 close(FH);
