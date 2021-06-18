@@ -1,0 +1,155 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+use English;
+use File::Temp qw/ tempdir /;
+use Cwd;
+
+
+# Augustus tester and annotation
+#USAGE:
+# perl perlAugustus.pl FASTA BED
+
+### INPUT -------------------------------------------------------------
+my $FASTA=$ARGV[0];
+my $GFF=$ARGV[1];
+my $dir = getcwd . "/";
+
+my $AUGUSTUSbin = "augustus";
+#my $AUGUSTUSbin = "/home/michele/Software/augustus.2.5.5/bin/augustus";
+#my $AUGUSTUSconf = "/home/michele/Software/augustus.2.5.5/config"; 
+
+### Read in Genome
+
+## read input sequence inside an HASH (geneID "\t" fasta)
+
+# unzip if needed
+if ($FASTA =~ /.gz$/) {
+    open(IN, "gunzip -c $FASTA |") or die "can't open $FASTA";
+}
+else {
+    open(IN, $FASTA) or die "can't open $FASTA";
+}
+## read input sequence inside an hash
+
+my %seqs = ();
+my $header = '';
+
+while (my $line = <IN>){
+    chomp $line;
+    $line =~ s/^\s*$//;
+    if ($line =~ m/^>(.*)$/){
+        # remove sequence description from header
+        $header = (split ' ', $1)[0];
+    } else {
+        $seqs{"$header"} .= $line;
+    }
+}
+close (IN);
+
+
+## Print out temp chromosome files
+my $TEMPchromoFasta = tempdir( DIR => $dir, CLEANUP => 1 ); 
+my $NewChomosomeName;
+my $NewChromosomeSequence;
+
+while ( ($NewChomosomeName, $NewChromosomeSequence) = each %seqs ) {
+	my $FILE = $TEMPchromoFasta . '/ChromosomeFile_' . $NewChomosomeName . ".fa" ;
+        open(FH, '>>', $FILE) or die $!;
+        print FH ">$NewChomosomeName\n$NewChromosomeSequence\n";
+        close(FH);
+}
+
+
+### Read in Bed (array) + sort
+my @BEDgene;
+my $OUTFILE;
+my %AAsequence = ();
+open(IN, $GFF) or die "can't open $GFF";
+while(<IN>){
+	chomp;
+	push @BEDgene, $_;
+	}
+close(IN);
+@BEDgene = sort @BEDgene;
+
+# Augustus
+foreach (@BEDgene){
+
+	my @bedRow = (split ' ', $_, 4);
+	my $Chromosome = $bedRow[0];
+	my $start = $bedRow[1]-500;
+	my $end = $bedRow[2]+500;
+	# test if chromosome is available (aka annotation and fasta use same names)
+	if(!exists($seqs{$Chromosome})) {
+	    print "ERROR: Make sure that chromosomes have the same name in annotation and fasta.\n";
+   	    exit; 
+	    }  
+	
+	# Select chromosome file
+	my $ChromoFile = $TEMPchromoFasta . '/ChromosomeFile_' . $Chromosome . ".fa";
+	# Prepare Output file name
+	my $TEMPaugustusOUT = tempdir( DIR => $dir, CLEANUP => 1 ); 
+	$OUTFILE = $TEMPaugustusOUT . '/Augustus_' . $Chromosome . '_' . $start ; 
+	
+	# Run Augustus
+	#system "$AUGUSTUSbin --AUGUSTUS_CONFIG_PATH=$AUGUSTUSconf --genemodel=complete --singlestrand=true --predictionStart=$start --predictionEnd=$end --gff3=on --UTR=off --species=arabidopsis $ChromoFile
+		system "$AUGUSTUSbin --genemodel=complete --singlestrand=true --predictionStart=$start --predictionEnd=$end --gff3=on --UTR=off --species=arabidopsis $ChromoFile --outfile=$OUTFILE" ;
+	
+	# Parse Output file
+	open(OUT, $OUTFILE) or die "can't open $OUTFILE";
+	while(<OUT>){
+		chomp;
+		# don't keep lines with comments
+		if ($_ !~ m/^#/){
+			# keep only gene, transcript and CDS
+			if ($_ =~ m/(gene|transcript|CDS)/){
+			my @gffRow = (split ' ', $_, 9);
+			
+			# New Names
+			my $Description ;
+			my $NAME = $Chromosome . '_' . $start . '_' . $end;
+			$Description = $gffRow[8];
+			my $Replacement = $NAME . '_var';
+			$Description =~ s/g/$Replacement/ ;
+			# New gff line
+			my $NEWline = $gffRow[0] . "\tmwyler\t" . $gffRow[2] . "\t" . $gffRow[3] . "\t" . $gffRow[4] . "\t" . $gffRow[5] . "\t" . $gffRow[6] . "\t" . $gffRow[7] . "\t" . $Description;
+
+			print "$NEWline\n";
+		
+			}
+		}
+		# get AA sequence
+		my $AAheader = $Chromosome . '_' . $start . '_' . $end;
+		if ($_ =~ m/^#/){
+			chomp ;
+			$AAsequence{"$AAheader"} .= $_;
+			
+		
+		}
+		
+	}
+	close (OUT);
+	
+	# Print Out Fasta with AA sequence
+	my $FASTAout = $GFF;
+	$FASTAout =~ s/\..*$/.fa/;
+	open(FH, '>', $FASTAout) or die $!;
+	while ( my ($k,$v) = each %AAsequence ) {
+		# test if any sequence is present
+		if ($v !~ m/(none)/){
+		$v =~ s/^.*\[//g;
+		$v =~ s/\].*//g;
+		$v =~ s/#//g;
+		$v =~ s/ //g;
+    		print FH ">$k\n$v\n";
+    		}
+	}
+	close(FH);
+
+
+}
+
+
+
