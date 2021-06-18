@@ -17,8 +17,6 @@ my $GFF=$ARGV[1];
 my $dir = getcwd . "/";
 
 my $AUGUSTUSbin = "augustus";
-#my $AUGUSTUSbin = "/home/michele/Software/augustus.2.5.5/bin/augustus";
-#my $AUGUSTUSconf = "/home/michele/Software/augustus.2.5.5/config"; 
 
 ### Read in Genome
 
@@ -94,8 +92,7 @@ foreach (@BEDgene){
 	$OUTFILE = $TEMPaugustusOUT . '/Augustus_' . $Chromosome . '_' . $start ; 
 	
 	# Run Augustus
-	#system "$AUGUSTUSbin --AUGUSTUS_CONFIG_PATH=$AUGUSTUSconf --genemodel=complete --singlestrand=true --predictionStart=$start --predictionEnd=$end --gff3=on --UTR=off --species=arabidopsis $ChromoFile
-		system "$AUGUSTUSbin --genemodel=complete --singlestrand=true --predictionStart=$start --predictionEnd=$end --gff3=on --UTR=off --species=arabidopsis $ChromoFile --outfile=$OUTFILE" ;
+	system "$AUGUSTUSbin --genemodel=complete --singlestrand=true --predictionStart=$start --predictionEnd=$end --gff3=on --UTR=off --species=arabidopsis $ChromoFile --outfile=$OUTFILE" ;
 	
 	# Parse Output file
 	open(OUT, $OUTFILE) or die "can't open $OUTFILE";
