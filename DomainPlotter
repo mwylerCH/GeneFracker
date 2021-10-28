@@ -33,7 +33,7 @@ Annotation tester
 
 =head1 SYNOPSIS
 
-  --Fasta, -F            Genes of interest in fasta format (required)
+  --Fasta, -F            Genes of interest in nucl fasta format (required)
   --outPrefix, -o        Prefix of the output files, allows redirection (optional)
   
 Help
