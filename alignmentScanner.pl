@@ -17,7 +17,7 @@ use File::Temp qw(tempfile);
 my $dir = getcwd . "/";
 
 my $ALIGNMENT = $ARGV[0];
-my $NRcores = $ARG[1];
+my $NRcores = $ARGV[1];
 
 # define hash with codons
 my %CodonTable = ('TTT' => 'F',
